@@ -88,8 +88,11 @@ function FlowPilotApp() {
       const id = `node_${nodeIdCounter.current++}`;
       const subtypeMap: Record<string, { nodeType: string; subtype: string }> = {
         manualTrigger: { nodeType: "trigger", subtype: "manual" },
+        webhookTrigger: { nodeType: "trigger", subtype: "webhook" },
         aiClassifier: { nodeType: "ai", subtype: "classifier" },
         aiSentiment: { nodeType: "ai", subtype: "sentiment" },
+        aiExtractor: { nodeType: "ai", subtype: "extractor" },
+        customAI: { nodeType: "ai", subtype: "custom" },
         notification: { nodeType: "action", subtype: "notification" },
         logger: { nodeType: "action", subtype: "logger" },
       };

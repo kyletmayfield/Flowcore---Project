@@ -47,20 +47,26 @@ export default function NodeConfigPanel({ node, onUpdate }: Props) {
         <>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
-              AI Instruction
+              {data.subtype === "custom" ? "Custom Prompt" : "AI Instruction"}
             </label>
             <textarea
               value={data.instruction ?? ""}
               onChange={(e) => onUpdate(node.id, { instruction: e.target.value })}
-              rows={4}
+              rows={data.subtype === "custom" ? 6 : 4}
               className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-              placeholder="Describe what this AI node should do..."
+              placeholder={
+                data.subtype === "custom"
+                  ? "Write your custom prompt here. Use {input} to reference the input data..."
+                  : data.subtype === "extractor"
+                    ? "Describe what data to extract from the input..."
+                    : "Describe what this AI node should do..."
+              }
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
-              Output Categories
+              {data.subtype === "extractor" ? "Fields to Extract" : "Output Categories"}
             </label>
             <input
               type="text"
@@ -71,9 +77,17 @@ export default function NodeConfigPanel({ node, onUpdate }: Props) {
                 })
               }
               className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="positive, negative, neutral"
+              placeholder={
+                data.subtype === "extractor"
+                  ? "name, email, topic, urgency"
+                  : "positive, negative, neutral"
+              }
             />
-            <p className="text-[10px] text-gray-400 mt-0.5">Comma-separated list</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              {data.subtype === "extractor"
+                ? "Comma-separated field names to extract"
+                : "Comma-separated list"}
+            </p>
           </div>
 
           <div>
@@ -91,6 +105,32 @@ export default function NodeConfigPanel({ node, onUpdate }: Props) {
             </select>
           </div>
         </>
+      )}
+
+      {/* Webhook trigger fields */}
+      {data.type === "trigger" && data.subtype === "webhook" && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Webhook Endpoint
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 font-mono">POST</span>
+            <input
+              type="text"
+              value={String(data.actionConfig?.endpoint ?? "/api/webhook")}
+              onChange={(e) =>
+                onUpdate(node.id, {
+                  actionConfig: { ...data.actionConfig, endpoint: e.target.value },
+                })
+              }
+              className="flex-1 px-3 py-1.5 text-sm font-mono border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="/api/webhook/my-flow"
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            Accepts JSON POST body as workflow input
+          </p>
+        </div>
       )}
 
       {/* Action node fields */}

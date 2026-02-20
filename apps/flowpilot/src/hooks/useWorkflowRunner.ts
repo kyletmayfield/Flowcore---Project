@@ -41,6 +41,53 @@ export function createMockAIExecutor(): AIExecutor {
     ).toLowerCase();
     const categories = node.config.output_schema ?? [];
 
+    // --- AI Extractor: returns structured fields instead of a decision ---
+    if (node.subtype === "extractor") {
+      const fields = node.config.output_schema ?? ["name", "email", "topic"];
+      const extracted: Record<string, string> = {};
+      for (const field of fields) {
+        extracted[field] = `(extracted ${field})`;
+      }
+      // Try to pull realistic values from the message
+      if (message.includes("@")) extracted["email"] = "user@example.com";
+      if (fields.includes("topic")) extracted["topic"] = "support inquiry";
+
+      return {
+        output: { decision: "extracted", ...extracted },
+        reasoning: {
+          summary: `Extracted ${fields.length} structured fields from unstructured input.`,
+          factors: fields.map((f) => ({
+            factor: f,
+            observation: `Identified and extracted the '${f}' field from the input text.`,
+            weight: "medium" as const,
+          })),
+          alternatives_considered: [],
+        },
+        confidence: 0.83,
+        duration_ms: Date.now() - start,
+      };
+    }
+
+    // --- Custom AI: uses the freeform instruction ---
+    if (node.subtype === "custom") {
+      const firstCategory = categories[0] ?? "result";
+      return {
+        output: { decision: firstCategory },
+        reasoning: {
+          summary: `Custom AI node executed with instruction: "${(node.config.instruction ?? "").slice(0, 80)}".`,
+          factors: [
+            { factor: "Custom instruction", observation: "Applied the user-defined prompt to the input data.", weight: "high" as const },
+            { factor: "Output schema", observation: `Mapped result to one of: ${categories.join(", ") || "(none defined)"}`, weight: "medium" as const },
+          ],
+          alternatives_considered: categories.length > 1
+            ? [{ option: categories[1], why_rejected: "First category was the best match for the input." }]
+            : [],
+        },
+        confidence: 0.76,
+        duration_ms: Date.now() - start,
+      };
+    }
+
     let decision: string;
     let confidence: number;
     let reasoning: ReasoningTrace;

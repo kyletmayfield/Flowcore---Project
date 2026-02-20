@@ -165,8 +165,11 @@ export const demoWorkflow: Workflow = {
 export function workflowToReactFlow(workflow: Workflow) {
   const nodeTypeMap: Record<string, string> = {
     "trigger:manual": "manualTrigger",
+    "trigger:webhook": "webhookTrigger",
     "ai:classifier": "aiClassifier",
     "ai:sentiment": "aiSentiment",
+    "ai:extractor": "aiExtractor",
+    "ai:custom": "customAI",
     "action:notification": "notification",
     "action:logger": "logger",
   };

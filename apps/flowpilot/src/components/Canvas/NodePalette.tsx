@@ -34,6 +34,27 @@ const nodeTemplates = [
     color: "border-gray-300 bg-gray-50",
     textColor: "text-gray-600",
   },
+  {
+    type: "webhookTrigger",
+    label: "Webhook Trigger",
+    category: "TRIGGER",
+    color: "border-emerald-300 bg-emerald-50",
+    textColor: "text-emerald-600",
+  },
+  {
+    type: "aiExtractor",
+    label: "AI Extractor",
+    category: "AI",
+    color: "border-rose-300 bg-rose-50",
+    textColor: "text-rose-600",
+  },
+  {
+    type: "customAI",
+    label: "Custom AI",
+    category: "AI",
+    color: "border-violet-300 bg-violet-50",
+    textColor: "text-violet-600",
+  },
 ];
 
 interface Props {

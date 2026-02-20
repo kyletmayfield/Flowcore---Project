@@ -3,6 +3,9 @@ import AIClassifierNode from "./AIClassifierNode";
 import AISentimentNode from "./AISentimentNode";
 import NotificationNode from "./NotificationNode";
 import LoggerNode from "./LoggerNode";
+import WebhookTriggerNode from "./WebhookTriggerNode";
+import AIExtractorNode from "./AIExtractorNode";
+import CustomAINode from "./CustomAINode";
 
 export const nodeTypes = {
   manualTrigger: ManualTriggerNode,
@@ -10,6 +13,9 @@ export const nodeTypes = {
   aiSentiment: AISentimentNode,
   notification: NotificationNode,
   logger: LoggerNode,
+  webhookTrigger: WebhookTriggerNode,
+  aiExtractor: AIExtractorNode,
+  customAI: CustomAINode,
 };
 
 export type FlowNodeType = keyof typeof nodeTypes;
