@@ -1,8 +1,16 @@
 import { useState, useCallback } from "react";
-import { executeWorkflow, type Workflow, type WorkflowSettings, type ExecutionRun } from "@flowcore/engine";
+import {
+  executeWorkflow,
+  buildEdgeCaseAnalyzerPrompt,
+  parseEdgeCaseResponse,
+  type Workflow,
+  type WorkflowSettings,
+  type Grade,
+} from "@flowcore/engine";
 import type { AIExecutor } from "@flowcore/engine";
 import type { ScenarioInput } from "../components/ScenarioTest/ScenarioTestPanel";
 import type { ScenarioResultData, EdgeCase } from "../components/ScenarioTest/ScenarioResults";
+import { callClaude } from "../lib/claude";
 
 interface ScenarioRunnerDeps {
   workflow: Workflow;
@@ -45,7 +53,7 @@ export function useScenarioRunner(deps: ScenarioRunnerDeps) {
           });
 
           const aiTrace = run.node_traces.find((t) => t.confidence !== undefined);
-          const decision = (aiTrace?.output as any)?.decision ?? "—";
+          const decision = (aiTrace?.output as any)?.decision ?? "\u2014";
 
           allResults.push({
             inputId: input.id,
@@ -56,7 +64,7 @@ export function useScenarioRunner(deps: ScenarioRunnerDeps) {
             pathTaken: run.node_traces
               .filter((t) => t.edge_taken)
               .map((t) => t.edge_taken)
-              .join(" → "),
+              .join(" \u2192 "),
             confidence: aiTrace?.confidence ?? 0,
             grade: run.trust_grade,
             status: run.status,
@@ -79,30 +87,59 @@ export function useScenarioRunner(deps: ScenarioRunnerDeps) {
         (r) => r.grade === "D" || r.grade === "F"
       );
 
-      const generatedEdgeCases: EdgeCase[] = lowConfidence.map((r) => {
-        let concern: string;
-        let suggestion: string;
+      if (lowConfidence.length > 0) {
+        // Try AI-powered edge case analysis first
+        try {
+          const prompt = buildEdgeCaseAnalyzerPrompt(
+            workflow.description || workflow.name,
+            lowConfidence.map((r) => ({
+              input_id: r.inputId,
+              data_preview: r.inputPreview,
+              path_taken: r.pathTaken,
+              confidence: r.confidence,
+              grade: r.grade as Grade,
+              color: r.grade === "F" ? "red" : "orange",
+              human_override: false,
+            }))
+          );
 
-        if (r.grade === "F") {
-          concern = `Low confidence (${Math.round(r.confidence * 100)}%) — the AI classified this as "${r.decision}" but is essentially guessing.`;
-          suggestion =
-            r.confidence < 0.5
-              ? "Consider adding a human review trigger or adding more specific classification categories for ambiguous inputs."
-              : "This input may contain sarcasm or mixed signals. Consider rewording the AI instruction to handle ambiguous tone.";
-        } else {
-          concern = `Moderate-low confidence (${Math.round(r.confidence * 100)}%) — classified as "${r.decision}" but notable uncertainty.`;
-          suggestion =
-            "Review whether this classification is correct. If it's a common pattern, consider adding explicit handling in the workflow.";
+          const raw = await callClaude(prompt);
+          const aiEdgeCases = parseEdgeCaseResponse(raw);
+          // Map engine EdgeCase (input_id) to component EdgeCase (inputId)
+          setEdgeCases(aiEdgeCases.map((ec) => ({
+            inputId: ec.input_id,
+            concern: ec.concern,
+            suggestion: ec.suggestion,
+          })));
+        } catch {
+          // Fallback: generate edge cases with simple heuristics
+          const heuristicEdgeCases: EdgeCase[] = lowConfidence.map((r) => {
+            let concern: string;
+            let suggestion: string;
+
+            if (r.grade === "F") {
+              concern = `Low confidence (${Math.round(r.confidence * 100)}%) \u2014 the AI classified this as "${r.decision}" but is essentially guessing.`;
+              suggestion =
+                r.confidence < 0.5
+                  ? "Consider adding a human review trigger or adding more specific classification categories for ambiguous inputs."
+                  : "This input may contain sarcasm or mixed signals. Consider rewording the AI instruction to handle ambiguous tone.";
+            } else {
+              concern = `Moderate-low confidence (${Math.round(r.confidence * 100)}%) \u2014 classified as "${r.decision}" but notable uncertainty.`;
+              suggestion =
+                "Review whether this classification is correct. If it's a common pattern, consider adding explicit handling in the workflow.";
+            }
+
+            return {
+              inputId: r.inputId,
+              concern,
+              suggestion,
+            };
+          });
+
+          setEdgeCases(heuristicEdgeCases);
         }
+      }
 
-        return {
-          inputId: r.inputId,
-          concern,
-          suggestion,
-        };
-      });
-
-      setEdgeCases(generatedEdgeCases);
       setIsRunning(false);
     },
     [workflow, settings, aiExecutor]

@@ -230,5 +230,16 @@ export function createMockSocialFoxAI(): AICallFn {
   };
 }
 
+/**
+ * Creates a real AI call function from a fetch callback.
+ * This allows the frontend to provide its own /api/ai proxy caller
+ * while keeping the orchestrator framework-agnostic.
+ */
+export function createRealSocialFoxAI(
+  fetchFn: (prompt: string) => Promise<string>
+): AICallFn {
+  return fetchFn;
+}
+
 // Re-export helpers for the UI
 export { analyzeEdits, updatePlatformHistory };

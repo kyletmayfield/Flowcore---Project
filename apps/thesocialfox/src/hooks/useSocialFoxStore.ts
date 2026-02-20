@@ -1,7 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { Persona, Platform, TraceDepth, PlatformHistory } from "@flowcore/engine";
-import type { GenerationRun, CaptionResult } from "socialfox-adapter";
-import { runGeneration, createMockSocialFoxAI, analyzeEdits, updatePlatformHistory } from "socialfox-adapter";
+import type { GenerationRun, CaptionResult, AICallFn } from "socialfox-adapter";
+import { runGeneration, createMockSocialFoxAI, createRealSocialFoxAI, analyzeEdits, updatePlatformHistory } from "socialfox-adapter";
+import { callClaude, ClaudeAPIError } from "../lib/claude";
 
 const DEMO_PERSONA: Persona = {
   id: "p_demo",
@@ -42,7 +43,31 @@ const DEMO_PERSONA: Persona = {
 
 const ALL_PLATFORMS: Platform[] = ["instagram", "twitter", "linkedin", "facebook"];
 
-const mockAI = createMockSocialFoxAI();
+/**
+ * Creates an AI call function that tries the real Claude API first,
+ * then falls back to mock if unavailable.
+ */
+function createAICallWithFallback(): AICallFn {
+  const mockAI = createMockSocialFoxAI();
+  const realAI = createRealSocialFoxAI(callClaude);
+  let useMock = false;
+
+  return async (prompt: string) => {
+    if (useMock) return mockAI(prompt);
+
+    try {
+      return await realAI(prompt);
+    } catch (err) {
+      if (err instanceof ClaudeAPIError && err.useMock) {
+        useMock = true;
+        console.warn("Claude API not configured — using demo mode with mock responses");
+      } else {
+        console.warn("Claude API call failed, falling back to mock:", err);
+      }
+      return mockAI(prompt);
+    }
+  };
+}
 
 export interface SocialFoxState {
   persona: Persona;
@@ -71,6 +96,9 @@ export function useSocialFoxStore() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [generationHistory, setGenerationHistory] = useState<GenerationRun[]>([]);
 
+  // Create AI call function once, with fallback to mock
+  const aiCallRef = useRef(createAICallWithFallback());
+
   const generate = useCallback(async () => {
     if (!userContext.trim() || selectedPlatforms.length === 0) return;
 
@@ -89,7 +117,6 @@ export function useSocialFoxStore() {
       for (const p of selectedPlatforms) {
         const hist = persona.learned_preferences[p];
         if (hist && hist.avg_confidence) {
-          // Simulate a rolling window of recent confidences
           const count = Math.min(hist.generation_count, 10);
           for (let i = 0; i < count; i++) {
             recentConfidences[p].push(hist.avg_confidence + (Math.random() - 0.5) * 0.1);
@@ -103,7 +130,7 @@ export function useSocialFoxStore() {
         userContext,
         hasImage,
         traceDepth,
-        mockAI,
+        aiCallRef.current,
         recentConfidences
       );
 

@@ -3,6 +3,7 @@ import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
 import type { Node, Edge, NodeChange, EdgeChange } from "@xyflow/react";
 import type { Workflow, WorkflowSettings, ExecutionRun } from "@flowcore/engine";
 import { demoWorkflow, workflowToReactFlow } from "../lib/demoWorkflow";
+import { supabase } from "../lib/supabase";
 
 export interface WorkflowStore {
   // Workflow data
@@ -53,6 +54,12 @@ export interface HumanReviewState {
 
 const STORAGE_KEY = "flowpilot_workflow";
 
+/** Check if Supabase is configured (has real credentials) */
+function isSupabaseConfigured(): boolean {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  return Boolean(url && !url.includes("your-") && url.includes("supabase"));
+}
+
 export function useWorkflowStore(): WorkflowStore {
   const initial = workflowToReactFlow(demoWorkflow);
 
@@ -85,12 +92,56 @@ export function useWorkflowStore(): WorkflowStore {
     }));
   }, []);
 
-  const saveWorkflow = useCallback(() => {
-    const data = JSON.stringify({ workflow, nodes, edges, settings });
-    localStorage.setItem(STORAGE_KEY, data);
+  const saveWorkflow = useCallback(async () => {
+    const data = { workflow, nodes, edges, settings };
+
+    // Always save to localStorage as backup
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+    // Try Supabase if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase.from("workflows").upsert({
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          definition: { nodes, edges, workflow },
+          settings,
+        });
+        if (error) {
+          console.warn("Supabase save failed, using localStorage:", error.message);
+        }
+      } catch {
+        console.warn("Supabase unavailable, saved to localStorage");
+      }
+    }
   }, [workflow, nodes, edges, settings]);
 
-  const loadWorkflow = useCallback(() => {
+  const loadWorkflow = useCallback(async () => {
+    // Try Supabase first if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from("workflows")
+          .select("*")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!error && data) {
+          const def = data.definition as any;
+          setWorkflow(def.workflow);
+          setNodes(def.nodes);
+          setEdges(def.edges);
+          setSettings(data.settings as WorkflowSettings);
+          return;
+        }
+      } catch {
+        // Fall through to localStorage
+      }
+    }
+
+    // Fallback: load from localStorage
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     try {

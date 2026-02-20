@@ -3,6 +3,7 @@ import {
   buildTestCaseGeneratorPrompt,
   parseGeneratedTestCases,
 } from "@flowcore/engine";
+import { callClaude, ClaudeAPIError } from "../../lib/claude";
 
 export interface ScenarioInput {
   id: string;
@@ -30,96 +31,54 @@ const defaultInputs: ScenarioInput[] = [
 ];
 
 /**
- * Mock AI generation function — simulates calling Claude to generate diverse
- * test inputs including edge cases. Uses the same mock pattern as the rest
- * of the app (returns after a short delay with realistic data).
- *
- * In production this would call the real AI executor with the prompt from
- * buildTestCaseGeneratorPrompt().
+ * Generates test cases using the real Claude API.
+ * Falls back to mock data if the API is unavailable.
  */
-async function mockGenerateTestCases(
+async function generateTestCases(
   useCase: string,
   count: number
 ): Promise<ScenarioInput[]> {
-  // Build the prompt (even though we mock the response, this validates the prompt builder)
-  const _prompt = buildTestCaseGeneratorPrompt(
+  const prompt = buildTestCaseGeneratorPrompt(
     useCase || "Customer support ticket classification workflow",
     ["Trigger: Incoming Message", "AI: Classify Intent", "Action: Route to Team"],
     ["complaint", "question", "feedback", "bug_report", "feature_request"],
     count
   );
 
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  try {
+    const raw = await callClaude(prompt);
+    const parsed = parseGeneratedTestCases(raw);
+    return parsed.map((tc) => ({
+      id: tc.id,
+      label: tc.label ?? "",
+      data: tc.data,
+      source: "ai_generated" as const,
+    }));
+  } catch (err) {
+    if (err instanceof ClaudeAPIError && err.useMock) {
+      console.warn("Claude API not configured — using mock test cases");
+    } else {
+      console.warn("Test case generation failed, using mock fallback:", err);
+    }
+    return mockTestCases(count);
+  }
+}
 
-  // Return diverse mock test cases including edge cases
-  const mockResponse: ScenarioInput[] = [
-    {
-      id: `gen_${Date.now()}_1`,
-      label: "sarcastic complaint",
-      data: { message: "Oh wonderful, the app crashed AGAIN. Truly a delightful experience." },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_2`,
-      label: "multi-intent message",
-      data: { message: "I need to change my email address and also why was I charged $50 last month? Plus the mobile app is really slow." },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_3`,
-      label: "very short message",
-      data: { message: "help" },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_4`,
-      label: "ambiguous tone",
-      data: { message: "I guess this works... not really what I expected though." },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_5`,
-      label: "long detailed message",
-      data: {
-        message:
-          "Hi there, I've been a customer for about 3 years now and I've generally been happy with the service. However, over the past two weeks I've noticed that my dashboard takes over 30 seconds to load, the export feature gives me a 500 error about half the time, and yesterday I was logged out mid-session and lost a report I'd been working on for an hour. I'm seriously considering switching to a competitor unless these issues are resolved soon. Can someone from your engineering team look into this?",
-      },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_6`,
-      label: "emoji only",
-      data: { message: "\u{1F621}\u{1F621}\u{1F621}" },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_7`,
-      label: "mixed language",
-      data: { message: "Merci but your product is broken, kann ich einen Refund bekommen?" },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_8`,
-      label: "all caps aggressive",
-      data: { message: "THIS IS UNACCEPTABLE I WANT MY MONEY BACK RIGHT NOW" },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_9`,
-      label: "backhanded compliment",
-      data: { message: "Your support team is way better than your actual product." },
-      source: "ai_generated",
-    },
-    {
-      id: `gen_${Date.now()}_10`,
-      label: "question disguised as complaint",
-      data: { message: "Is there a reason the pricing page shows different prices than what I was charged, or is that just a feature?" },
-      source: "ai_generated",
-    },
+/** Fallback mock test cases when Claude API is unavailable */
+function mockTestCases(count: number): ScenarioInput[] {
+  const mocks: ScenarioInput[] = [
+    { id: `gen_${Date.now()}_1`, label: "sarcastic complaint", data: { message: "Oh wonderful, the app crashed AGAIN. Truly a delightful experience." }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_2`, label: "multi-intent message", data: { message: "I need to change my email address and also why was I charged $50 last month? Plus the mobile app is really slow." }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_3`, label: "very short message", data: { message: "help" }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_4`, label: "ambiguous tone", data: { message: "I guess this works... not really what I expected though." }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_5`, label: "long detailed message", data: { message: "Hi there, I've been a customer for about 3 years now and I've generally been happy with the service. However, over the past two weeks I've noticed that my dashboard takes over 30 seconds to load, the export feature gives me a 500 error about half the time, and yesterday I was logged out mid-session and lost a report I'd been working on for an hour. I'm seriously considering switching to a competitor unless these issues are resolved soon." }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_6`, label: "emoji only", data: { message: "\u{1F621}\u{1F621}\u{1F621}" }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_7`, label: "mixed language", data: { message: "Merci but your product is broken, kann ich einen Refund bekommen?" }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_8`, label: "all caps aggressive", data: { message: "THIS IS UNACCEPTABLE I WANT MY MONEY BACK RIGHT NOW" }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_9`, label: "backhanded compliment", data: { message: "Your support team is way better than your actual product." }, source: "ai_generated" },
+    { id: `gen_${Date.now()}_10`, label: "question disguised as complaint", data: { message: "Is there a reason the pricing page shows different prices than what I was charged, or is that just a feature?" }, source: "ai_generated" },
   ];
-
-  return mockResponse.slice(0, count);
+  return mocks.slice(0, count);
 }
 
 export default function ScenarioTestPanel({ onRunScenario, isRunning }: Props) {
@@ -200,7 +159,7 @@ export default function ScenarioTestPanel({ onRunScenario, isRunning }: Props) {
     setGenerateError(null);
 
     try {
-      const generated = await mockGenerateTestCases(
+      const generated = await generateTestCases(
         useCaseDescription,
         generateCount
       );

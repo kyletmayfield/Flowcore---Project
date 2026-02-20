@@ -15,7 +15,7 @@ import "@xyflow/react/dist/style.css";
 import { nodeTypes } from "./nodes/nodeTypes";
 import type { FlowNodeData } from "./nodes/nodeTypes";
 import { useWorkflowStore } from "./hooks/useWorkflowStore";
-import { useWorkflowRunner, createMockAIExecutor } from "./hooks/useWorkflowRunner";
+import { useWorkflowRunner, createAIExecutor } from "./hooks/useWorkflowRunner";
 import { useScenarioRunner } from "./hooks/useScenarioRunner";
 import NodeConfigPanel from "./components/NodeConfig/NodeConfigPanel";
 import TracePanel from "./components/TracePanel/TracePanel";
@@ -52,7 +52,7 @@ function FlowPilotApp() {
   const scenario = useScenarioRunner({
     workflow: store.workflow,
     settings: store.settings,
-    aiExecutor: createMockAIExecutor(),
+    aiExecutor: createAIExecutor(),
   });
 
   const onConnect = useCallback(

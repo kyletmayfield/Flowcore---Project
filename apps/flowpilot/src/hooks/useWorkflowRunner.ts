@@ -13,6 +13,7 @@ import {
 import type { Node } from "@xyflow/react";
 import type { FlowNodeData } from "../nodes/nodeTypes";
 import type { HumanReviewState } from "./useWorkflowStore";
+import { callClaude, ClaudeAPIError } from "../lib/claude";
 
 interface RunnerDeps {
   workflow: Workflow;
@@ -25,9 +26,31 @@ interface RunnerDeps {
 }
 
 /**
+ * Real AI executor that calls Claude via the /api/ai proxy.
+ * Builds the prompt using FlowCore's prompt architecture, sends it to Claude,
+ * and parses the structured JSON response.
+ */
+export function createClaudeAIExecutor(): AIExecutor {
+  return async (node: WorkflowNode, payload: Record<string, unknown>) => {
+    const start = Date.now();
+    const traceDepth = node.config.trace_depth ?? "full";
+    const prompt = buildAINodePrompt(node.config, payload, traceDepth);
+
+    const raw = await callClaude(prompt);
+    const parsed = parseAIResponse(raw, traceDepth);
+
+    return {
+      output: { decision: parsed.decision },
+      reasoning: parsed.reasoning,
+      confidence: parsed.confidence,
+      duration_ms: Date.now() - start,
+    };
+  };
+}
+
+/**
  * Mock AI executor that simulates Claude API responses.
- * In production, this calls the real Anthropic API.
- * For the demo, it returns realistic mock responses based on input.
+ * Used as fallback when the API proxy is not available.
  */
 export function createMockAIExecutor(): AIExecutor {
   return async (node: WorkflowNode, payload: Record<string, unknown>) => {
@@ -48,7 +71,6 @@ export function createMockAIExecutor(): AIExecutor {
       for (const field of fields) {
         extracted[field] = `(extracted ${field})`;
       }
-      // Try to pull realistic values from the message
       if (message.includes("@")) extracted["email"] = "user@example.com";
       if (fields.includes("topic")) extracted["topic"] = "support inquiry";
 
@@ -92,7 +114,6 @@ export function createMockAIExecutor(): AIExecutor {
     let confidence: number;
     let reasoning: ReasoningTrace;
 
-    // Smart mock classification based on input content
     if (message.includes("furious") || message.includes("angry") || message.includes("unacceptable")) {
       decision = categories.includes("billing_angry") ? "billing_angry" : categories[0] ?? "negative";
       confidence = 0.91;
@@ -146,8 +167,7 @@ export function createMockAIExecutor(): AIExecutor {
           { option: "general_question", why_rejected: "The user is requesting, not asking." },
         ],
       };
-    } else if (message.includes("🙄") || message.includes("lol") || message.includes("whatever")) {
-      // Ambiguous / sarcastic — low confidence
+    } else if (message.includes("\u{1F644}") || message.includes("lol") || message.includes("whatever")) {
       decision = categories.includes("general_question") ? "general_question" : categories[0] ?? "neutral";
       confidence = 0.43;
       reasoning = {
@@ -185,6 +205,35 @@ export function createMockAIExecutor(): AIExecutor {
   };
 }
 
+/**
+ * Creates an AI executor that tries the real Claude API first,
+ * then falls back to mock if the API is unavailable.
+ */
+export function createAIExecutor(onMockFallback?: () => void): AIExecutor {
+  const realExecutor = createClaudeAIExecutor();
+  const mockExecutor = createMockAIExecutor();
+  let useMock = false;
+
+  return async (node, payload) => {
+    if (useMock) {
+      return mockExecutor(node, payload);
+    }
+
+    try {
+      return await realExecutor(node, payload);
+    } catch (err) {
+      if (err instanceof ClaudeAPIError && err.useMock) {
+        useMock = true;
+        onMockFallback?.();
+        console.warn("Claude API not configured — using demo mode with mock responses");
+      } else {
+        console.warn("Claude API call failed, falling back to mock:", err);
+      }
+      return mockExecutor(node, payload);
+    }
+  };
+}
+
 export function useWorkflowRunner(deps: RunnerDeps) {
   const {
     workflow,
@@ -209,7 +258,7 @@ export function useWorkflowRunner(deps: RunnerDeps) {
         }))
       );
 
-      const aiExecutor = createMockAIExecutor();
+      const aiExecutor = createAIExecutor();
 
       // Wrap AI executor to update node visuals during execution
       const visualAIExecutor: AIExecutor = async (node, payload) => {
