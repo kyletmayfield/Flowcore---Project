@@ -15,7 +15,8 @@ import "@xyflow/react/dist/style.css";
 import { nodeTypes } from "./nodes/nodeTypes";
 import type { FlowNodeData } from "./nodes/nodeTypes";
 import { useWorkflowStore } from "./hooks/useWorkflowStore";
-import { useWorkflowRunner } from "./hooks/useWorkflowRunner";
+import { useWorkflowRunner, createMockAIExecutor } from "./hooks/useWorkflowRunner";
+import { useScenarioRunner } from "./hooks/useScenarioRunner";
 import NodeConfigPanel from "./components/NodeConfig/NodeConfigPanel";
 import TracePanel from "./components/TracePanel/TracePanel";
 import HumanReviewPanel from "./components/HumanReview/HumanReviewPanel";
@@ -45,6 +46,12 @@ function FlowPilotApp() {
       }
     },
     setHumanReviewPending: store.setHumanReviewPending,
+  });
+
+  const scenario = useScenarioRunner({
+    workflow: store.workflow,
+    settings: store.settings,
+    aiExecutor: createMockAIExecutor(),
   });
 
   const onConnect = useCallback(
@@ -201,8 +208,16 @@ function FlowPilotApp() {
       )}
 
       {/* Bottom panel */}
-      <div className="h-48 border-t border-gray-200 bg-white overflow-hidden flex flex-col shrink-0">
-        <BottomPanel executionRun={store.executionRun} runHistory={runHistory} />
+      <div className="h-64 border-t border-gray-200 bg-white overflow-hidden flex flex-col shrink-0">
+        <BottomPanel
+          executionRun={store.executionRun}
+          runHistory={runHistory}
+          scenarioResults={scenario.results}
+          scenarioEdgeCases={scenario.edgeCases}
+          scenarioRunning={scenario.isRunning}
+          scenarioProgress={scenario.progress}
+          onRunScenario={scenario.runScenario}
+        />
       </div>
 
       {/* Modals */}

@@ -29,7 +29,7 @@ interface RunnerDeps {
  * In production, this calls the real Anthropic API.
  * For the demo, it returns realistic mock responses based on input.
  */
-function createMockAIExecutor(): AIExecutor {
+export function createMockAIExecutor(): AIExecutor {
   return async (node: WorkflowNode, payload: Record<string, unknown>) => {
     const start = Date.now();
 

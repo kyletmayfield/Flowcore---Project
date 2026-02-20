@@ -1,9 +1,19 @@
 import { useState } from "react";
 import type { ExecutionRun } from "@flowcore/engine";
+import ScenarioTestPanel from "./ScenarioTestPanel";
+import type { ScenarioInput } from "./ScenarioTestPanel";
+import ScenarioResults from "./ScenarioResults";
+import type { ScenarioResultData, EdgeCase } from "./ScenarioResults";
 
 interface Props {
   executionRun: ExecutionRun | null;
   runHistory: ExecutionRun[];
+  // Scenario test props
+  scenarioResults: ScenarioResultData[];
+  scenarioEdgeCases: EdgeCase[];
+  scenarioRunning: boolean;
+  scenarioProgress: { current: number; total: number };
+  onRunScenario: (inputs: ScenarioInput[]) => void;
 }
 
 const gradeColors: Record<string, string> = {
@@ -22,25 +32,50 @@ const gradeBg: Record<string, string> = {
   F: "bg-red-100",
 };
 
-type Tab = "history" | "trust";
+type Tab = "scenarios" | "results" | "history" | "trust";
 
-export default function BottomPanel({ executionRun, runHistory }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("history");
+export default function BottomPanel({
+  executionRun,
+  runHistory,
+  scenarioResults,
+  scenarioEdgeCases,
+  scenarioRunning,
+  scenarioProgress,
+  onRunScenario,
+}: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>("scenarios");
 
   return (
     <>
-      <div className="flex gap-4 px-4 py-2 border-b border-gray-100">
+      <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-100">
+        <TabButton active={activeTab === "scenarios"} onClick={() => setActiveTab("scenarios")}>
+          Scenario Tests
+        </TabButton>
+        <TabButton active={activeTab === "results"} onClick={() => setActiveTab("results")}>
+          Results {scenarioResults.length > 0 && `(${scenarioResults.length})`}
+        </TabButton>
         <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
-          Run History
+          Run History {runHistory.length > 0 && `(${runHistory.length})`}
         </TabButton>
         <TabButton active={activeTab === "trust"} onClick={() => setActiveTab("trust")}>
           Trust Score
         </TabButton>
+        {scenarioRunning && (
+          <span className="text-xs text-blue-500 animate-pulse ml-auto">
+            Running {scenarioProgress.current}/{scenarioProgress.total}...
+          </span>
+        )}
       </div>
 
-      <div className="p-4 overflow-y-auto flex-1">
+      <div className="overflow-y-auto flex-1">
+        {activeTab === "scenarios" && (
+          <ScenarioTestPanel onRunScenario={onRunScenario} isRunning={scenarioRunning} />
+        )}
+        {activeTab === "results" && (
+          <ScenarioResults results={scenarioResults} edgeCases={scenarioEdgeCases} />
+        )}
         {activeTab === "history" && <HistoryTab runs={runHistory} />}
-        {activeTab === "trust" && <TrustTab runs={runHistory} />}
+        {activeTab === "trust" && <TrustTab runs={[...runHistory, ...scenarioResults.map((r) => r.run)]} />}
       </div>
     </>
   );
@@ -69,11 +104,11 @@ function TabButton({
 
 function HistoryTab({ runs }: { runs: ExecutionRun[] }) {
   if (runs.length === 0) {
-    return <div className="text-sm text-gray-400">Run the workflow to see history here</div>;
+    return <div className="p-4 text-sm text-gray-400">Run the workflow to see history here</div>;
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="p-4 space-y-1.5">
       {[...runs].reverse().map((run, i) => {
         const inputPreview = JSON.stringify(run.input).slice(0, 80);
         const pathTaken = run.node_traces
@@ -107,7 +142,7 @@ function HistoryTab({ runs }: { runs: ExecutionRun[] }) {
 
 function TrustTab({ runs }: { runs: ExecutionRun[] }) {
   if (runs.length === 0) {
-    return <div className="text-sm text-gray-400">Run multiple inputs to see trust score</div>;
+    return <div className="p-4 text-sm text-gray-400">Run tests to see the trust score</div>;
   }
 
   const avgScore = Math.round(runs.reduce((s, r) => s + r.trust_score, 0) / runs.length);
@@ -118,7 +153,7 @@ function TrustTab({ runs }: { runs: ExecutionRun[] }) {
   runs.forEach((r) => distribution[r.trust_grade]++);
 
   return (
-    <div className="space-y-3">
+    <div className="p-4 space-y-3">
       <div className="flex items-center gap-4">
         <div className={`text-3xl font-bold ${gradeColors[avgGrade]}`}>
           {avgGrade}
