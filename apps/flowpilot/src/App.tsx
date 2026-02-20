@@ -24,6 +24,7 @@ import SettingsPanel from "./components/Settings/SettingsPanel";
 import BottomPanel from "./components/ScenarioTest/BottomPanel";
 import RunInputModal from "./components/Canvas/RunInputModal";
 import NodePalette from "./components/Canvas/NodePalette";
+import LandingPage from "./components/LandingPage";
 
 function FlowPilotApp() {
   const store = useWorkflowStore();
@@ -240,6 +241,12 @@ function FlowPilotApp() {
 }
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(true);
+
+  if (showLanding) {
+    return <LandingPage onLaunch={() => setShowLanding(false)} />;
+  }
+
   return (
     <ReactFlowProvider>
       <FlowPilotApp />
