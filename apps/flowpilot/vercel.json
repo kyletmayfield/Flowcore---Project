@@ -1,5 +1,4 @@
 {
-  "installCommand": "cd ../.. && npm i -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm --filter @flowcore/engine build && pnpm --filter flowpilot build",
   "outputDirectory": "dist",
   "framework": "vite",
